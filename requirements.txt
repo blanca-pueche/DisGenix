@@ -1,5 +1,5 @@
 
-# requirements.txt for Tractome project
+# requirements.txt for DisGenix project
 # 
 biopython
 gseapy
