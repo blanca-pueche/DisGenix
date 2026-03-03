@@ -168,14 +168,10 @@ if searchBy:
     elif searchBy == options[0]:
         with st.spinner("Downloading MeSH data..."):
             try:
-                path = download_mesh_xml()
+                mesh_df = get_mesh_df()
             except Exception as e:
                 st.error(f"Problem downloading MeSH data: {e}")
                 st.stop()
-
-        mesh_df = load_mesh_xml(path)
-
-        mesh_df = mesh_df[mesh_df["TreeNumber"].apply(lambda x: any(tn.startswith("C") for tn in x) if isinstance(x, list) else False)]
 
         input_text = st.text_input("🔍 Enter disease name (type at least 3 letters):")
 
@@ -370,8 +366,8 @@ if searchBy:
 
         # Step 5: Search biotype and tractability for the genes in Open Targets
         with st.spinner("Checking Open Targets..."):
-            openTargets_results = df_selected["Gene"].apply(find_possible_target_of_drugs)
-            openTargets_df = pd.DataFrame([r for r in openTargets_results if r is not None])
+            openTargets_results = cached_open_targets(tuple(df_selected["Gene"].unique()))
+            openTargets_df = pd.DataFrame(openTargets_results)
 
         if not openTargets_df.empty:
             if "Name" in openTargets_df.columns:
@@ -588,7 +584,6 @@ if searchBy:
                     top_pathways = analyze_pathways(df_selected, number_pathways)
                     top_pathways["-log10(Adj P)"] = -np.log10(top_pathways["Adjusted P-value"])
                     top_pathways = top_pathways.sort_values("Adjusted P-value", ascending=True)
-
 
                     if top_pathways is not None:
                         html_pathway_table = top_pathways[["Reactome Link", "Adjusted P-value", "-log10(Adj P)", "Overlap", "Input %", "Sum log2fc"]].to_html(escape=False, index=False, table_id="topPathwayTable")
@@ -848,7 +843,7 @@ if searchBy:
                     selected_pathway_row = top_pathways[top_pathways["Term"] == selected_pathway].iloc[0]
 
                     pathway_genes = get_overlapping_genes(df_selected, selected_pathway_row)
-                    drug_df = get_drug_targets_dgidb_graphql(pathway_genes["Gene Name"].tolist())
+                    drug_df = cached_dgidb(tuple(sorted(pathway_genes["Gene Name"].unique())))
 
                 if not drug_df.empty:
 
@@ -1044,7 +1039,7 @@ if searchBy:
                 merged["abs_fc"] = merged["log_2 fold change"].abs()
 
                 # Drug–gene interactions for all genes
-                all_drug_df = get_drug_targets_dgidb_graphql(merged["Gene Name"].unique().tolist())
+                all_drug_df = cached_dgidb(tuple(sorted(merged["Gene Name"].unique())))
 
             if not all_drug_df.empty:
                 drug_clean = all_drug_df.copy()

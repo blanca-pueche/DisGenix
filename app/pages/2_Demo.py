@@ -68,8 +68,14 @@ logo_placeholder.markdown(
     unsafe_allow_html=True
 )
 
-# Image set with st.image() 
-st.image("../assets/CNB_2025.png", width=200)
+# Image set with st.image()
+col1, col2 = st.columns([1,5],gap=None, vertical_alignment='bottom')
+with col1:
+    st.image("../assets/disgenixLogo.png", width=200)
+with col2:
+    st.image("../assets/CNB_2025.png", width=200)
+
+st.logo(image="../assets/disgenixLogo2.png", size="large")
 
 st.title("DisGenix")
 st.markdown(

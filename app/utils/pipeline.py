@@ -59,6 +59,28 @@ def load_mesh_xml(xml_file):
         })
     return pd.DataFrame(records)
 
+from concurrent.futures import ThreadPoolExecutor
+
+@st.cache_data(show_spinner=False)
+def cached_open_targets(gene_tuple):
+    genes = list(gene_tuple)
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        results = list(executor.map(find_possible_target_of_drugs, genes))
+    return [r for r in results if r is not None]
+
+@st.cache_data(show_spinner=False)
+def cached_dgidb(gene_list_tuple):
+    return get_drug_targets_dgidb_graphql(list(gene_list_tuple))
+
+@st.cache_data(show_spinner=False)
+def get_mesh_df():
+    path = download_mesh_xml()
+    df = load_mesh_xml(path)
+    df = df[df["TreeNumber"].apply(
+        lambda x: any(tn.startswith("C") for tn in x) if isinstance(x, list) else False
+    )]
+    return df
+
 def get_disease_name(mesh_id):
     """
     Returns the corresponding name of a disease given a MESH id provided by the user. 
@@ -93,32 +115,23 @@ def generate_expression_atlas_link(disease_name):
     )
     return base_url
 
-def get_gene_name_from_ensembl(ensembl_id, retries=3, delay=1):
-    """
-    Given an ensembl id it extracts the corresponding gene name.
-    """
-    url = f"{ENSEMBL_LOOKUP_URL}{ensembl_id}?content-type=application/json"
 
-    for attempt in range(retries):
-        try:
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                return data.get("display_name", "Not Found")
-            elif response.status_code == 429:
-                st.warning("Error 429: Resource Exceeded. Please try again later.")
-                st.stop()
-        except requests.exceptions.ConnectionError as e:
-            print(f"Connection error on attempt {attempt + 1} for {ensembl_id}: {e}")
-            time.sleep(delay)
-        except requests.exceptions.Timeout:
-            print(f"Timeout on attempt {attempt + 1} for {ensembl_id}")
-            time.sleep(delay)
-        except Exception as e:
-            print(f"Unexpected error for {ensembl_id}: {e}")
-            break
+@st.cache_data(show_spinner=False)
+def get_gene_names_batch(ensembl_ids):
+    url = "https://rest.ensembl.org/lookup/id"
+    headers = {"Content-Type": "application/json"}
 
-    return "Not Found"
+    payload = {"ids": list(ensembl_ids)}
+    response = requests.post(url, json=payload, headers=headers)
+
+    if response.status_code != 200:
+        return {}
+
+    data = response.json()
+    return {
+        gene_id: info.get("display_name", "Not Found")
+        for gene_id, info in data.items()
+    }
 
 def fetch_gene_names(df):
     """
@@ -131,11 +144,14 @@ def fetch_gene_names(df):
             st.error(f"Missing required column: '{col}'")
             st.stop()
 
-    df["Gene Name"] = df["Gene"].apply(get_gene_name_from_ensembl)
+    gene_map = get_gene_names_batch(df["Gene"].unique())
+
+    df["Gene Name"] = df["Gene"].map(gene_map)
     df_filtered = df[df["Gene Name"] != "Not Found"]
 
-    # Sum log2 fold changes  and adjusted p-val for repeated genes
-    grouped = df_filtered.groupby(["Gene", "Gene Name"], as_index=False).agg({
+    grouped = df_filtered.groupby(
+        ["Gene", "Gene Name"], as_index=False
+    ).agg({
         "log_2 fold change": "sum",
         "Adjusted p-value": "sum"
     })
@@ -328,8 +344,9 @@ def get_drug_targets_dgidb_graphql(gene_names):
                         })
             except:
                 continue
-    
+
     return pd.DataFrame(all_results)
+
 
 def drug_with_links(df):
     """
@@ -348,26 +365,6 @@ def drug_with_links(df):
         if pmid else "NaN"
     )
     return df_with_links
-    
-
-def estimate_table_height(df, max_visible_rows=10, base_row_height=50, tall_row_height=70, overhead=70, min_height=350, max_height=1200): 
-    """
-    Estimates table height to display the table without it being cropped
-    """
-    visible_rows = min(len(df), max_visible_rows) 
-    
-    if df.shape[1] >= 2: 
-        lengths = df.iloc[:visible_rows, :2].astype(str).map(len) 
-    else: 
-        lengths = df.iloc[:visible_rows].astype(str).map(len) 
-    
-    tall_rows = (lengths > 60).any(axis=1).sum() 
-    normal_rows = visible_rows - tall_rows 
-    row_height = (normal_rows * base_row_height) + (tall_rows * tall_row_height) 
-    
-    estimated_height = row_height + overhead 
-    # Clamp height between min and max 
-    return max(min(estimated_height, max_height), min_height)
 
 def normalize_disease_name(name: str) -> str:
     """
@@ -470,29 +467,3 @@ def save_drug_csvs(df_selected, top_pathways):
             csv_files[f"{safe_name}_drugs.csv"] = buf.getvalue().encode("utf-8")
 
     return csv_files
-
-
-def create_combined_zip(zip_path, folders=[], extra_files=[]):
-    """
-    Create a zip containing all CSVs from the given folders + any extra files.
-    
-    Parameters:
-        zip_path (str): Path where the zip will be saved.
-        folders (list of str): List of folder paths containing CSVs.
-        extra_files (list of str): List of extra CSV file paths to include.
-    """
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        # Add all CSVs from each folder
-        for folder in folders:
-            for root, _, files in os.walk(folder):
-                for file in files:
-                    if file.endswith(".csv"):
-                        file_path = os.path.join(root, file)
-                        zipf.write(file_path, arcname=file)
-        
-        # Add any extra individual files
-        for file_path in extra_files:
-            if os.path.exists(file_path):
-                zipf.write(file_path, arcname=os.path.basename(file_path))
-
-
