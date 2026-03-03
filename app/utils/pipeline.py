@@ -123,21 +123,23 @@ def get_gene_names_batch(ensembl_ids):
 
     payload = {"ids": list(ensembl_ids)}
     response = requests.post(url, json=payload, headers=headers)
-
     if response.status_code != 200:
+        st.warning(f"Ensembl request failed with status {response.status_code}")
         return {}
-
     data = response.json()
-    return {
-        gene_id: info.get("display_name", "Not Found")
-        for gene_id, info in data.items()
-    }
+    gene_map = {}
+    for gene_id, info in data.items():
+        if info is None:
+            gene_map[gene_id] = "Not Found"
+        else:
+            gene_map[gene_id] = info.get("display_name", "Not Found")
+
+    return gene_map
 
 def fetch_gene_names(df):
     """
     Fetches gene names from ensembl and groups them according to log_2 fold change.
     """
-    
     required_columns = ["Gene", "log_2 fold change", "Adjusted p-value"]
     for col in required_columns:
         if col not in df.columns:
@@ -214,21 +216,37 @@ def find_possible_target_of_drugs(ensembl_id):
         return None
 
 
-def analyze_pathways(df, number):
+def analyze_pathways(df, number, retries=3, delay=5):
     """
-    Analyzes n (given number) pathways in which the the genes interact.
+    Analyzes n (given number) pathways in which the genes interact.
+    Retries Enrichr API call up to 'retries' times in case of timeout.
     """
     # Prepare gene list
     df_genes = df["Gene Name"].dropna().astype(str).str.strip().str.upper().unique().tolist()
 
-    # Enrichment
-    enr = gp.enrichr(gene_list=df_genes, gene_sets="Reactome_2022", organism="Human", outdir=None)
-    if enr.results.empty:
-        return None, None
+    # Enrichment with retry
+    for attempt in range(retries):
+        try:
+            enr = gp.enrichr(
+                gene_list=df_genes,
+                gene_sets="Reactome_2022",
+                organism="Human",
+                outdir=None
+            )
+            if enr.results.empty:
+                return None
+            top_pathways = enr.results.copy()
+            break  # success, exit retry loop
+        except gp.enrichr.EnrichrAPIError as e:
+            st.warning(f"Enrichr API error (attempt {attempt+1}/{retries}): {e}")
+            if attempt < retries - 1:
+                st.info(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                st.error("Enrichr server is not responding. Try again later.")
+                return None
 
-    top_pathways = enr.results.copy()
-
-    # Extract Reactome ID and create direct link
+    # Create Reactome links
     def make_reactome_link(term):
         match = re.search(r'(R-HSA-\d+)', term)
         if match:
@@ -238,9 +256,10 @@ def analyze_pathways(df, number):
 
     top_pathways["Reactome Link"] = top_pathways["Term"].apply(make_reactome_link)
 
-
     # Parse overlap info
-    top_pathways[["Input Genes", "Pathway Genes"]] = top_pathways["Overlap"].str.split("/", expand=True).astype(int)
+    top_pathways[["Input Genes", "Pathway Genes"]] = (
+        top_pathways["Overlap"].str.split("/", expand=True).astype(int)
+    )
     top_pathways["Input %"] = top_pathways["Input Genes"] / top_pathways["Pathway Genes"] * 100
     top_pathways = top_pathways.sort_values("Adjusted P-value", ascending=True).head(number)
 
@@ -251,7 +270,6 @@ def analyze_pathways(df, number):
         genes = [g.strip().upper() for g in row["Genes"].split(";")]
         overlap_df = df[df["Gene Name"].isin(genes)]
         sum_fc.append(overlap_df["log_2 fold change"].sum())
-
     top_pathways["Sum log2fc"] = sum_fc
 
     return top_pathways
