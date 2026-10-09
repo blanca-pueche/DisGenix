@@ -1,4 +1,4 @@
-# DisGenix:  a web application for integrative analysis of upregulated disease genes, pathways, and drug interactions
+conda ac# DisGenix:  a web application for integrative analysis of upregulated disease genes, pathways, and drug interactions
 <img src="assets/disgenixLogo.png" alt="DisGenix logo" width="150"/>
 
 DisGenix is a web-based application designed for the integrative analysis of disease-associated gene expression data. The tool links differentially expressed genes with tractability annotations, pathway enrichment, and drug–gene interactions, providing a comprehensive view of disease mechanisms and potential therapeutic targets. Our tool is focused on upregulated genes, which could be the target of pharmacological treatments.
@@ -6,8 +6,9 @@ DisGenix is a web-based application designed for the integrative analysis of dis
 ![DisGenix workflow](assets/doc/DisGenix_workflow.png)
 
 ## Features
-- **Identify disease** using a MeSH ID.
+- **Identify disease** using a MeSH ID or disease name.
 - **Identify upregulated genes** from Expression Atlas.
+- Or **upload your genes** from a CSV file.
 - **Obtain tractability information** from OpenTargets.
 - **Perform pathway enrichment analysis** using Reactome
 - **Identify potential drug targets** via DGIdb.
@@ -17,9 +18,9 @@ DisGenix helps researchers quickly identify **drug-targetable genes** in complex
 
 ## Getting started
 1. Access the web application via [The DisGenix Project at BCU](https://disgenix.biocomputingunit.es).
-2. Input a **MeSH ID** and upload **differential gene expression data.**
+2. Input a **MeSH ID** or **disease name** and upload **differential gene expression data**, or upload your **own gene csv file**.
 3. Explore analysis results through the web interface. 
-4. Download results as needed fro downstream analysis.
+4. Download results as needed for downstream analysis.
 
 ## Deploying your own DisGenix instance
 You can also deploy your own DisGenix instance as such:

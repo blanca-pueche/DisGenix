@@ -142,14 +142,22 @@ st.write('Enter user e-mail ℹ️: ')
 email = st.text_input("User e-mail:", key="user_email", label_visibility="collapsed")
 Entrez.email = email
 
-options = ['Disease name', 'Disease MeSH ID']
+options = [
+    'Disease name',
+    'Disease MeSH ID',
+    'Upload gene CSV'
+]
 searchBy = st.pills('Input: ', options, selection_mode="single", default=None)
 
-#Step 2: Retrieve MeSH ID
+# Initialise variables shared by all input methods
+normalized_disease = None
+df_selected = None
+uploaded_file = None
+
+# Step 2: Retrieve input
 spinner = st.spinner
 
 if searchBy:
-    normalized_disease = None
     if searchBy == options[1]:
         input = st.text_input("🔍 Enter MeSH ID (e.g., D003920 for Diabetes Mellitus):")
         if input:
@@ -187,34 +195,136 @@ if searchBy:
                 disease_url = f"https://www.ncbi.nlm.nih.gov/mesh/{mesh_id}"
                 normalized_disease = selected_disease
                 st.success(f"🎯 Disease **[{normalized_disease}]({disease_url})** identified")
+    elif searchBy == options[2]:
+        uploaded_csv = st.file_uploader(
+            "📁 Upload a CSV containing gene names and an optional log-fold change column",
+            type=["csv"],
+            key="gene_csv_uploader",
+            help=(
+                "The CSV's first column must contain gene names and may optionally include "
+                "the log_2 fold change value in the second column. Gene names are mapped to Ensembl IDs, "
+                "and rows with duplicated Ensembl IDs are removed, keeping the first occurrence."
+            )
+        )
 
-    uploaded_file = None
+        if uploaded_csv is not None:
+            try:
+                # Read CSV without assuming particular column names
+                df_raw = pd.read_csv(uploaded_csv)
+
+                if df_raw.empty or len(df_raw.columns) == 0:
+                    st.error("The uploaded CSV is empty.")
+                    st.stop()
+
+                # First column: gene names
+                gene_col = df_raw.columns[0]
+
+                # Second column, if present: optional log-fold changes
+                fc_col = df_raw.columns[1] if len(df_raw.columns) >= 2 else None
+
+                df_input = pd.DataFrame()
+                df_input["Gene Name"] = (
+                    df_raw[gene_col]
+                    .astype("string")
+                    .str.strip()
+                )
+
+                # Clean missing or empty gene names
+                valid_gene = (
+                        df_input["Gene Name"].notna()
+                        & df_input["Gene Name"].ne("")
+                        & df_input["Gene Name"].str.lower().ne("nan")
+                )
+
+                df_input = df_input.loc[valid_gene].copy()
+
+                if df_input.empty:
+                    st.error("No valid gene names were found in the first column.")
+                    st.stop()
+
+                # Parse the optional fold-change column.
+                # If it is absent or contains no numeric values, retain NaN.
+                has_fold_change = False
+
+                if fc_col is not None:
+                    df_input["log_2 fold change"] = pd.to_numeric(
+                        df_raw.loc[df_input.index, fc_col],
+                        errors="coerce"
+                    )
+
+                    has_fold_change = df_input["log_2 fold change"].notna().any()
+                else:
+                    df_input["log_2 fold change"] = np.nan
+
+                if not has_fold_change:
+                    df_input["log_2 fold change"] = np.nan
+                    st.info(
+                        "No numeric fold-change values were detected. "
+                        "The analysis will use the gene list without fold-change information."
+                    )
+
+                # Combine duplicated genes.
+                # Mean is used when fold-change values are available.
+                if has_fold_change:
+                    df_input = df_input[
+                        ["Gene Name", "log_2 fold change"]
+                    ].copy()
+                else:
+                    df_input = df_input[["Gene Name"]].drop_duplicates()
+                    df_input["log_2 fold change"] = np.nan
+
+                st.success(f"Loaded {len(df_input)} genes.")
+
+                # Convert gene symbols to Ensembl IDs and prepare the
+                # dataframe expected by the downstream pipeline.
+                df_selected = prepare_gene_csv(df_input)
+
+                # Preserve whether the uploaded data actually contained FC values
+                st.session_state["csv_has_fold_change"] = has_fold_change
+
+            except Exception as e:
+                st.error(f"Could not process the uploaded CSV: {e}")
+                st.stop()
+
+    # Expression Atlas upload is needed only for disease-based input.
+    # CSV input has already populated df_selected.
     if normalized_disease:
-        # Step 3: File upload only after disease name is given
         url = generate_expression_atlas_link(disease_name=normalized_disease)
+
         uploaded_file = st.file_uploader(
             f"📁 Upload Differential Expression File (TSV from Expression Atlas: [link]({url}))",
             type=["tsv"]
         )
 
+        if uploaded_file is not None:
+            df_raw = pd.read_csv(uploaded_file, sep="\t")
+            st.write("Uploaded correctly")
 
-    if uploaded_file:
-        df_raw = pd.read_csv(uploaded_file, sep="\t")
-        st.write("Uploaded correctly")
+            with st.spinner("Mapping Ensembl IDs to gene names..."):
+                try:
+                    df_selected = fetch_gene_names(df_raw)
+                except ValueError as e:
+                    st.error(f"Problem with uploaded file: {e}")
+                    st.stop()
 
-        with st.spinner("Mapping Ensembl IDs to gene names..."):
-            try:
-                df_selected = fetch_gene_names(df_raw)
-            except ValueError as e:
-                st.error(f"Problem with uploaded file: {e}")
-                st.stop()
+    # Run the shared analysis for either input method.
+    if df_selected is not None and not df_selected.empty:
 
         # Step 4: Obtain Ensembl ID with links for the genes
         df_selected_with_links = df_selected.copy()
+
         df_selected_with_links["Gene"] = df_selected_with_links["Gene"].apply(
-            lambda gene_id: f'<a href="https://www.ensembl.org/Multi/Search/Results?q={gene_id}" target="_blank">{gene_id}</a>'
+            lambda gene_id: (
+                f'<a href="https://www.ensembl.org/search/results?query={gene_id}" '
+                f'target="_blank">{gene_id}</a>'
+            )
         )
-        df_selected_with_links = df_selected_with_links.sort_values(by="log_2 fold change", ascending=False)
+
+        df_selected_with_links = df_selected_with_links.sort_values(
+            by="log_2 fold change",
+            ascending=False,
+            na_position="last"
+        )
         #Rename columns to keep consistency
         df_selected_with_links_newNames = df_selected_with_links.rename(columns={
             "Gene":"Ensembl ID",
@@ -345,23 +455,45 @@ if searchBy:
 
         df_selected["Gene Name_raw"] = df_selected["Gene Name"]
 
-        gname_fc = df_selected.groupby("Gene Name_raw", as_index=False)["log_2 fold change"].sum()
-        gname_fc = gname_fc.sort_values("log_2 fold change", ascending=False)
-
-        # Graph for genes and their log2 fold change
-        fig = px.bar(
-            gname_fc,
-            x="Gene Name_raw",
-            y="log_2 fold change",
-            color="log_2 fold change",
-            color_continuous_scale="sunset",
-            title="Sum of log₂ fold change per gene",
-            labels={"Gene Name_raw": "Gene Name", "log_2 fold change": "Sum of log₂ fold change"},
-            height=500,
-            width=2000
+        has_fold_change = (
+            df_selected["log_2 fold change"].notna().any()
         )
 
-        st.plotly_chart(fig, width="stretch")
+        if has_fold_change:
+            gname_fc = (
+                df_selected.groupby("Gene Name_raw", as_index=False)
+                ["log_2 fold change"]
+                .sum(min_count=1)
+            )
+
+            gname_fc = gname_fc.sort_values(
+                "log_2 fold change",
+                ascending=False,
+                na_position="last"
+            )
+
+            fig = px.bar(
+                gname_fc,
+                x="Gene Name_raw",
+                y="log_2 fold change",
+                color="log_2 fold change",
+                color_continuous_scale="sunset",
+                title="Sum of log₂ fold change per gene",
+                labels={
+                    "Gene Name_raw": "Gene Name",
+                    "log_2 fold change": "Sum of log₂ fold change"
+                },
+                height=500,
+                width=2000
+            )
+
+            st.plotly_chart(fig, width="stretch")
+
+        else:
+            st.info(
+                "The uploaded gene list does not contain numeric fold-change values. "
+                "The fold-change graph is unavailable."
+            )
 
 
         # Step 5: Search biotype and tractability for the genes in Open Targets
@@ -389,7 +521,7 @@ if searchBy:
                 )
 
                 openTargets_df["Ensembl ID"] = openTargets_df["Ensembl ID"].apply(
-                    lambda gene_id: f'<a href="https://www.ensembl.org/Multi/Search/Results?q={gene_id}" target="_blank">{gene_id}</a>'
+                    lambda gene_id: f'<a href="https://www.ensembl.org/search/results?query={gene_id}" target="_blank">{gene_id}</a>'
                 )
 
                 openTargets_df_newNames = openTargets_df.rename(columns={
@@ -709,7 +841,7 @@ if searchBy:
 
                         # Turn Gene IDs into Ensembl search links
                         pathway_genes["Gene"] = pathway_genes["Gene"].apply(
-                            lambda gene_id: f'<a href="https://www.ensembl.org/Multi/Search/Results?q={gene_id}" target="_blank">{gene_id}</a>'
+                            lambda gene_id: f'<a href="https://www.ensembl.org/search/results?query={gene_id}" target="_blank">{gene_id}</a>'
                         )
 
                         pathway_genes = pathway_genes.drop(columns=["Gene Name_raw", "abs_fc"])
@@ -1117,7 +1249,7 @@ if searchBy:
                 merged = merged.drop(columns=["Gene Name_raw", "abs_fc", "Ensembl ID"])
 
                 merged["Gene"] = merged["Gene"].apply(
-                        lambda gene_id: f'<a href="https://www.ensembl.org/Multi/Search/Results?q={gene_id}" target="_blank">{gene_id}</a>'
+                        lambda gene_id: f'<a href="https://www.ensembl.org/search/results?query={gene_id}" target="_blank">{gene_id}</a>'
                     )
 
                 merged_newNames = merged.rename(columns={

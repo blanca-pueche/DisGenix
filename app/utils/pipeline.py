@@ -146,7 +146,12 @@ def fetch_gene_names(df):
             st.error(f"Missing required column: '{col}'")
             st.stop()
 
-    gene_map = get_gene_names_batch(df["Gene"].unique())
+    gene_ids = tuple(
+        str(gene_id)
+        for gene_id in df["Gene"].dropna().unique()
+    )
+
+    gene_map = get_gene_names_batch(gene_ids)
 
     df["Gene Name"] = df["Gene"].map(gene_map)
     df_filtered = df[df["Gene Name"] != "Not Found"]
@@ -230,7 +235,7 @@ def analyze_pathways(df, number, retries=3, delay=5):
             enr = gp.enrichr(
                 gene_list=df_genes,
                 gene_sets="Reactome_2022",
-                organism="Human",
+                organism="hsapiens",
                 outdir=None
             )
             if enr.results.empty:
@@ -405,7 +410,7 @@ def add_links_to_final_table(df):
     # Gene → Ensembl
     if "Ensembl ID" in df.columns:
         df["Ensembl ID"] = df["Ensembl ID"].apply(
-            lambda gene_id: f'<a href="https://www.ensembl.org/Multi/Search/Results?q={urllib.parse.quote(str(gene_id))}" target="_blank">{gene_id}</a>'
+            lambda gene_id: f'<a href="https://www.ensembl.org/search/results?query={urllib.parse.quote(str(gene_id))}" target="_blank">{gene_id}</a>'
         )
     
     # Drug → DGIdb
@@ -485,3 +490,107 @@ def save_drug_csvs(df_selected, top_pathways):
             csv_files[f"{safe_name}_drugs.csv"] = buf.getvalue().encode("utf-8")
 
     return csv_files
+
+@st.cache_data(show_spinner=False)
+def get_ensembl_ids_batch(gene_names):
+    """Map human gene symbols to Ensembl gene IDs."""
+
+    gene_names = tuple(
+        dict.fromkeys(
+            str(name).strip()
+            for name in gene_names
+            if name is not None and str(name).strip()
+        )
+    )
+
+    if not gene_names:
+        return {}
+
+    url = "https://rest.ensembl.org/lookup/symbol/homo_sapiens"
+    headers = {"Content-Type": "application/json"}
+
+    response = requests.post(
+        url,
+        json={"symbols": list(gene_names)},
+        headers=headers,
+        timeout=60,
+    )
+    response.raise_for_status()
+
+    results = response.json()
+
+    return {
+        symbol: results[symbol]["id"]
+        for symbol in gene_names
+        if results.get(symbol) and results[symbol].get("id")
+    }
+
+
+def prepare_gene_csv(df_raw):
+    """Prepare an uploaded gene CSV for the existing DisGenix pipeline."""
+
+    df = df_raw.copy()
+
+    # Ensure the expected columns exist.
+    if "Gene Name" not in df.columns:
+        raise ValueError("The CSV must contain a 'Gene Name' column.")
+
+    if "log_2 fold change" not in df.columns:
+        df["log_2 fold change"] = np.nan
+
+    # Clean gene symbols.
+    df["Gene Name"] = df["Gene Name"].astype("string").str.strip()
+
+    df = df.dropna(subset=["Gene Name"]).copy()
+    df = df[
+        (df["Gene Name"] != "")
+        & (df["Gene Name"].str.lower() != "nan")
+    ].copy()
+
+    if df.empty:
+        st.error("No valid gene names were found in the uploaded CSV.")
+        st.stop()
+
+    # Ensure fold changes are numeric, preserving missing values.
+    df["log_2 fold change"] = pd.to_numeric(
+        df["log_2 fold change"],
+        errors="coerce",
+    )
+
+    # Map gene symbols to Ensembl IDs.
+    gene_names = tuple(df["Gene Name"].dropna().unique())
+    gene_mapping = get_ensembl_ids_batch(gene_names)
+
+    df["Gene"] = df["Gene Name"].map(gene_mapping)
+
+    # Report genes that could not be mapped.
+    unmapped = df.loc[df["Gene"].isna(), "Gene Name"].unique()
+
+    if len(unmapped) > 0:
+        st.warning(
+            f"{len(unmapped)} gene(s) could not be mapped to Ensembl IDs "
+            "and will be excluded from the downstream analysis: "
+            + ", ".join(map(str, unmapped[:20]))
+            + (" ..." if len(unmapped) > 20 else "")
+        )
+
+    df = df.dropna(subset=["Gene"]).copy()
+
+    if df.empty:
+        st.error(
+            "None of the uploaded genes could be mapped to Ensembl IDs. "
+            "Please check that the CSV contains valid human gene symbols."
+        )
+        st.stop()
+
+    # Combine duplicate gene symbols, if present.
+    df = (
+        df.groupby(["Gene", "Gene Name"], as_index=False)
+        ["log_2 fold change"]
+        .mean()
+    )
+
+    # Match the structure expected by the existing pipeline.
+    df = df[["Gene", "Gene Name", "log_2 fold change"]]
+
+    return df.reset_index(drop=True)
