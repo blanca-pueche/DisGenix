@@ -1,4 +1,4 @@
-conda ac# DisGenix:  a web application for integrative analysis of upregulated disease genes, pathways, and drug interactions
+# DisGenix:  a web application for integrative analysis of upregulated disease genes, pathways, and drug interactions
 <img src="assets/disgenixLogo.png" alt="DisGenix logo" width="150"/>
 
 DisGenix is a web-based application designed for the integrative analysis of disease-associated gene expression data. The tool links differentially expressed genes with tractability annotations, pathway enrichment, and drug–gene interactions, providing a comprehensive view of disease mechanisms and potential therapeutic targets. Our tool is focused on upregulated genes, which could be the target of pharmacological treatments.
