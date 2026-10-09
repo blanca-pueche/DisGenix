@@ -4,6 +4,35 @@ from collections import defaultdict
 import streamlit.components.v1 as components
 from utils.pipeline import *
 from utils.utils import estimate_table_height
+import html
+
+
+def make_genecards_link(gene):
+    if pd.isna(gene) or not str(gene).strip():
+        return ""
+
+    gene = str(gene).strip()
+
+    # Extract the actual gene name from existing HTML, if present
+    match = re.search(r'<span[^>]*title=["\']([^"\']+)["\']', gene)
+
+    if match:
+        gene_name = match.group(1)
+    else:
+        # Remove any remaining HTML tags
+        gene_name = re.sub(r"<[^>]+>", "", gene)
+        gene_name = html.unescape(gene_name).strip()
+
+    # Create the GeneCards link using the actual gene name
+    gene_url = (
+        "https://www.genecards.org/cgi-bin/carddisp.pl?gene="
+        f"{requests.utils.quote(gene_name)}"
+    )
+
+    return (
+        f'<a href="{gene_url}" target="_blank">'
+        f'{html.escape(gene_name)}</a>'
+    )
 
 st.set_page_config(
     page_title="Home - DisGenix CNB",
@@ -339,6 +368,11 @@ if searchBy:
             st.warning("The gene table is empty. Stopping the program.")
             st.stop()
 
+        # Add GeneCards links to the Gene column
+        df_selected_with_links_newNames["Gene"] = (
+            df_selected_with_links_newNames["Gene"].apply(make_genecards_link)
+        )
+
         # Conversion of dataframe to HTML
         html_table = df_selected_with_links_newNames.to_html(escape=False, index=False, table_id="geneTable")
 
@@ -535,6 +569,10 @@ if searchBy:
                     ℹ️ For details on how tractability is defined, see the 
                     [Open Targets Tractability Overview](https://platform-docs.opentargets.org/target/tractability).
                     """
+                )
+
+                openTargets_df_newNames["Gene"] = (
+                    openTargets_df_newNames["Gene"].apply(make_genecards_link)
                 )
 
                 html_ot_table = openTargets_df_newNames.to_html(escape=False, index=False, table_id="openTargetsTable")
@@ -850,6 +888,11 @@ if searchBy:
                             "Gene":"Ensembl ID",
                             "Gene Name":"Gene"
                         })
+
+                        # Add GeneCards links to the Gene column
+                        pathway_genes_newNames["Gene"] = (
+                            pathway_genes_newNames["Gene"].apply(make_genecards_link)
+                        )
 
                         # Render HTML table with scroll
                         html_genespathway_table = pathway_genes_newNames.to_html(escape=False, index=False, table_id="pathwayGeneTable")
@@ -1172,6 +1215,246 @@ if searchBy:
 
                 # Drug–gene interactions for all genes
                 all_drug_df = cached_dgidb(tuple(sorted(merged["Gene Name"].unique())))
+
+                # --- Drug frequency across all input genes ---
+                if not all_drug_df.empty:
+                    st.markdown("# 💊 Drug Frequency Across Input Genes")
+
+                    drug_frequency = (
+                        all_drug_df
+                        .dropna(subset=["Drug", "Gene"])
+                        .groupby("Drug")
+                        .agg(
+                            **{
+                                "Number of genes": ("Gene", "nunique"),
+                                "Genes": (
+                                    "Gene",
+                                    lambda genes: sorted(genes.unique())
+                                )
+                            }
+                        )
+                        .reset_index()
+                        .sort_values(
+                            by="Number of genes",
+                            ascending=False
+                        )
+                        .reset_index(drop=True)
+                    )
+
+                    # Build HTML table with clickable drug and gene names
+                    html_rows = []
+
+                    for _, row in drug_frequency.iterrows():
+                        drug = str(row["Drug"])
+
+                        drug_url = (
+                            "https://go.drugbank.com/unearth/q?"
+                            f"searcher=drugs&query={requests.utils.quote(drug)}"
+                        )
+
+                        drug_link = (
+                            f'<a href="{drug_url}" target="_blank">'
+                            f'{html.escape(drug)}</a>'
+                        )
+
+                        # Use the shared GeneCards helper for gene links
+                        genes_html = ", ".join(
+                            make_genecards_link(gene)
+                            for gene in row["Genes"]
+                        )
+
+                        html_rows.append(
+                            f"""
+                            <tr>
+                                <td>{drug_link}</td>
+                                <td>{row['Number of genes']}</td>
+                                <td>{genes_html}</td>
+                            </tr>
+                            """
+                        )
+
+                    html_final_table = f"""
+                     <table id="drugFrequencyTable" class="display">
+                         <thead>
+                             <tr>
+                                 <th>Drug</th>
+                                 <th>Number of genes</th>
+                                 <th>Genes</th>
+                             </tr>
+                         </thead>
+                         <tbody>
+                             {''.join(html_rows)}
+                         </tbody>
+                     </table>
+                     """
+
+                    html_code_final = f"""
+                     <link rel="stylesheet"
+                           href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+                     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+                     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+                     <style>
+                         .dataTables_wrapper, .dataTables_wrapper * {{
+                             font-family: "Segoe UI", "Helvetica", "Arial", sans-serif !important;
+                             color: #31333f !important;
+                             font-size: 12px !important;
+                         }}
+
+                         #drugFrequencyTable {{
+                             width: 100% !important;
+                             border-collapse: collapse !important;
+                         }}
+
+                         #drugFrequencyTable,
+                         #drugFrequencyTable thead,
+                         #drugFrequencyTable tbody,
+                         #drugFrequencyTable tr,
+                         #drugFrequencyTable td,
+                         #drugFrequencyTable th {{
+                             background-color: white !important;
+                             color: #31333f !important;
+                             border-color: #ccc !important;
+                         }}
+
+                         #drugFrequencyTable th,
+                         #drugFrequencyTable td {{
+                             border: 1px solid #ccc !important;
+                             padding: 8px !important;
+                             text-align: left !important;
+                             vertical-align: top !important;
+                         }}
+
+                         #drugFrequencyTable thead th {{
+                             font-weight: 600 !important;
+                         }}
+
+                         #drugFrequencyTable a {{
+                             color: #2563a6 !important;
+                             text-decoration: none !important;
+                         }}
+
+                         #drugFrequencyTable a:hover {{
+                             text-decoration: underline !important;
+                         }}
+
+                         #drugFrequencyTable input {{
+                             width: 100%;
+                             box-sizing: border-box;
+                             background-color: white !important;
+                             color: #31333f !important;
+                             font-size: 12px !important;
+                             border: 1px solid #ccc !important;
+                             padding: 5px;
+                         }}
+
+                         .dataTables_length select {{
+                             background-color: white !important;
+                             color: #31333f !important;
+                             border: 1px solid #ccc !important;
+                             font-size: 12px !important;
+                         }}
+
+                         .dataTables_info {{
+                             color: #31333f !important;
+                         }}
+
+                         .dataTables_paginate a {{
+                             color: #31333f !important;
+                             font-size: 12px !important;
+                             font-weight: normal !important;
+                             padding: 6px 12px !important;
+                             border-radius: 6px !important;
+                             text-decoration: none !important;
+                             margin: 0 2px !important;
+                         }}
+
+                         .dataTables_paginate a.current {{
+                             background-color: #f0f0f0 !important;
+                             font-weight: bold !important;
+                             border: 1px solid #aaa !important;
+                         }}
+
+                         .dataTables_paginate a:hover {{
+                             background-color: #e3e3e3 !important;
+                         }}
+                     </style>
+
+                     <script>
+                         $(document).ready(function() {{
+
+                             // Add a second header row for column-specific searches
+                             $('#drugFrequencyTable thead tr')
+                                 .clone(false)
+                                 .addClass('filters')
+                                 .appendTo('#drugFrequencyTable thead');
+
+                             var table = $('#drugFrequencyTable').DataTable({{
+                                 scrollCollapse: true,
+                                 paging: true,
+                                 pageLength: 10,
+                                 orderCellsTop: true,
+                                 fixedHeader: false,
+                                 autoWidth: false,
+                                 order: [[1, 'desc']],
+                                 columnDefs: [
+                                     {{ targets: 1, width: '120px' }}
+                                 ],
+                                 initComplete: function() {{
+                                     var api = this.api();
+
+                                     api.columns().every(function(i) {{
+                                         var column = this;
+                                         var cell = $(
+                                             '#drugFrequencyTable thead tr.filters th'
+                                         ).eq(i);
+
+                                         var title = $(
+                                             '#drugFrequencyTable thead tr:first th'
+                                         ).eq(i).text();
+
+                                         cell.html(
+                                             '<input type="text" placeholder="Search ' +
+                                             title + '" />'
+                                         );
+
+                                         $('input', cell).on('keyup change', function() {{
+                                             if (column.search() !== this.value) {{
+                                                 column.search(this.value).draw();
+                                             }}
+                                         }});
+                                     }});
+                                 }}
+                             }});
+                         }});
+                     </script>
+
+                     <div style="overflow-x: auto;">
+                         {html_final_table}
+                     </div>
+                     """
+
+                    # Display the interactive table
+                    components.html(
+                        html_code_final,
+                        height=min(900, 180 + min(len(html_rows), 10) * 45),
+                        scrolling=True
+                    )
+
+                    # Download the underlying data as CSV
+                    drug_frequency["Genes"] = drug_frequency["Genes"].apply(
+                        lambda genes: ", ".join(genes)
+                    )
+
+                    st.download_button(
+                        "📥 Download Drug Frequency CSV",
+                        drug_frequency.to_csv(index=False),
+                        "drug_frequency.csv",
+                        "text/csv"
+                    )
+
+                else:
+                    st.info("No drug-gene interactions were found for the input genes.")
 
             if not all_drug_df.empty:
                 drug_clean = all_drug_df.copy()
