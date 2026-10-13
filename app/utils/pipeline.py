@@ -124,6 +124,7 @@ def get_gene_names_batch(ensembl_ids):
     payload = {"ids": list(ensembl_ids)}
     response = requests.post(url, json=payload, headers=headers)
     if response.status_code != 200:
+        print(url)
         st.warning(f"Ensembl request failed with status {response.status_code}")
         return {}
     data = response.json()

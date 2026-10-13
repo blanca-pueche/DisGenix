@@ -956,6 +956,231 @@ if mesh_id:
                     
             else:
                 st.warning("No enriched pathways found.")
+
+            # ============================================================
+            # Drug Frequency Across Input Genes (demo data)
+            # ============================================================
+
+            st.markdown("# 💊 Drug Frequency Across Input Genes")
+
+            # Load the saved example table
+            drug_frequency = pd.read_csv(
+                "../assets/demoData/drug_frequency.csv"
+            )
+
+            # Display drug and gene names as clickable links
+            html_rows = []
+
+            for _, row in drug_frequency.iterrows():
+                drug = str(row["Drug"])
+
+                # DrugBank link
+                drug_url = (
+                    "https://go.drugbank.com/unearth/q?"
+                    f"searcher=drugs&query={drug.replace(' ', '+')}"
+                )
+
+                drug_link = (
+                    f'<a href="{drug_url}" target="_blank">'
+                    f'{drug}</a>'
+                )
+
+                # The saved CSV contains the genes as a comma-separated string
+                genes = str(row["Genes"]).split(", ")
+
+                # GeneCards links
+                genes_html = ", ".join(
+                    f'<a href="https://www.genecards.org/cgi-bin/carddisp.pl?gene={gene.strip()}" '
+                    f'target="_blank">{gene.strip()}</a>'
+                    for gene in genes
+                    if gene.strip()
+                )
+
+                html_rows.append(
+                    f"""
+                    <tr>
+                        <td>{drug_link}</td>
+                        <td>{row["Number of genes"]}</td>
+                        <td>{genes_html}</td>
+                    </tr>
+                    """
+                )
+
+            html_table = f"""
+            <table id="drugFrequencyTable" class="display">
+                <thead>
+                    <tr>
+                        <th>Drug</th>
+                        <th>Number of genes</th>
+                        <th>Genes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {''.join(html_rows)}
+                </tbody>
+            </table>
+            """
+
+            html_code = f"""
+            <link rel="stylesheet"
+                  href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+
+            <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+            <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+            <style>
+                .dataTables_wrapper,
+                .dataTables_wrapper * {{
+                    font-family: "Segoe UI", "Helvetica", "Arial", sans-serif !important;
+                    color: #31333f !important;
+                    font-size: 15px !important;
+                }}
+
+                #drugFrequencyTable {{
+                    width: 100% !important;
+                    border-collapse: collapse !important;
+                }}
+
+                #drugFrequencyTable,
+                #drugFrequencyTable thead,
+                #drugFrequencyTable tbody,
+                #drugFrequencyTable tr,
+                #drugFrequencyTable td,
+                #drugFrequencyTable th {{
+                    background-color: white !important;
+                    color: #31333f !important;
+                    border-color: #ccc !important;
+                }}
+
+                #drugFrequencyTable th,
+                #drugFrequencyTable td {{
+                    border: 1px solid #ccc !important;
+                    padding: 8px !important;
+                    text-align: left !important;
+                    vertical-align: top !important;
+                }}
+
+                #drugFrequencyTable thead th {{
+                    font-weight: 600 !important;
+                }}
+
+                #drugFrequencyTable a {{
+                    color: #2563a6 !important;
+                    text-decoration: none !important;
+                }}
+
+                #drugFrequencyTable a:hover {{
+                    text-decoration: underline !important;
+                }}
+
+                #drugFrequencyTable input {{
+                    width: 100%;
+                    box-sizing: border-box;
+                    background-color: white !important;
+                    color: #31333f !important;
+                    font-size: 14px !important;
+                    border: 1px solid #ccc !important;
+                    padding: 5px;
+                }}
+
+                .dataTables_length select {{
+                    background-color: white !important;
+                    color: #31333f !important;
+                    border: 1px solid #ccc !important;
+                    font-size: 14px !important;
+                }}
+
+                .dataTables_info {{
+                    color: #31333f !important;
+                }}
+
+                .dataTables_paginate a {{
+                    color: #31333f !important;
+                    font-size: 14px !important;
+                    font-weight: normal !important;
+                    padding: 6px 12px !important;
+                    border-radius: 6px !important;
+                    text-decoration: none !important;
+                    margin: 0 2px !important;
+                }}
+
+                .dataTables_paginate a.current {{
+                    background-color: #f0f0f0 !important;
+                    font-weight: bold !important;
+                    border: 1px solid #aaa !important;
+                }}
+
+                .dataTables_paginate a:hover {{
+                    background-color: #e3e3e3 !important;
+                }}
+            </style>
+
+            <script>
+                $(document).ready(function() {{
+                    $('#drugFrequencyTable thead tr')
+                        .clone(false)
+                        .addClass('filters')
+                        .appendTo('#drugFrequencyTable thead');
+
+                    var table = $('#drugFrequencyTable').DataTable({{
+                        scrollCollapse: true,
+                        paging: true,
+                        pageLength: 10,
+                        orderCellsTop: true,
+                        fixedHeader: false,
+                        autoWidth: false,
+                        order: [[1, 'desc']],
+                        columnDefs: [
+                            {{ targets: 1, width: '120px' }}
+                        ],
+                        initComplete: function() {{
+                            var api = this.api();
+
+                            api.columns().every(function(i) {{
+                                var column = this;
+                                var cell = $(
+                                    '#drugFrequencyTable thead tr.filters th'
+                                ).eq(i);
+
+                                var title = $(
+                                    '#drugFrequencyTable thead tr:first th'
+                                ).eq(i).text();
+
+                                cell.html(
+                                    '<input type="text" placeholder="Search ' +
+                                    title + '" />'
+                                );
+
+                                $('input', cell).on('keyup change', function() {{
+                                    if (column.search() !== this.value) {{
+                                        column.search(this.value).draw();
+                                    }}
+                                }});
+                            }});
+                        }}
+                    }});
+                }});
+            </script>
+
+            <div style="overflow-x: auto;">
+                {html_table}
+            </div>
+            """
+
+            components.html(
+                html_code,
+                height=min(900, 180 + min(len(drug_frequency), 10) * 45),
+                scrolling=True
+            )
+
+            # Download the saved example table
+            st.download_button(
+                "📥 Download Drug Frequency CSV",
+                drug_frequency.to_csv(index=False),
+                "drug_frequency.csv",
+                "text/csv"
+            )
+
         # -- Merge all data into a full report table --
         with st.spinner("Creating summary table..."):
             if True:
@@ -1085,6 +1310,14 @@ if mesh_id:
                 except NameError: pass
                 try: candidates.append(("Drug interactions",    "drug_df.csv",          drug_df))
                 except NameError: pass
+                try:
+                    candidates.append((
+                        "Drug frequency across input genes",
+                        "drug_frequency.csv",
+                        drug_frequency
+                    ))
+                except NameError:
+                    pass
 
                 if candidates:
                     st.markdown("### Select tables to include in ZIP")
@@ -1143,7 +1376,8 @@ if mesh_id:
                         "topPathways.csv",
                         "genes_pathway.csv",
                         "drug_interactions.csv",
-                        "full_results_table.csv"
+                        "full_results_table.csv",
+                        "drug_frequency.csv",
                     ]
 
                     def count_csvs(folder):
@@ -1156,18 +1390,43 @@ if mesh_id:
 
                     if st.button("Generate and Download Tables"):
                         with st.spinner("Generating all CSVs..."):
-                            drug_csvs = save_drug_csvs(df_genes, top_pathways)
-                            pathway_csvs = save_pathway_csvs(df_genes, top_pathways)
+                            drug_csvs = save_drug_csvs(df_selected, top_pathways)
+                            pathway_csvs = save_pathway_csvs(df_selected, top_pathways)
 
                             # Build ZIP in memory
                             zip_buf = io.BytesIO()
+
                             with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+
                                 # Add pathway CSVs
                                 for fname, data in pathway_csvs.items():
                                     zf.writestr(fname, data)
+
                                 # Add drug CSVs
                                 for fname, data in drug_csvs.items():
                                     zf.writestr(fname, data)
+
+                                # Add the drug frequency table
+                                if (
+                                        "drug_frequency" in globals()
+                                        and not drug_frequency.empty
+                                ):
+                                    drug_frequency_export = drug_frequency.copy()
+
+                                    # Convert the list of genes to a CSV-friendly string
+                                    drug_frequency_export["Genes"] = (
+                                        drug_frequency_export["Genes"].apply(
+                                            lambda genes: ", ".join(genes)
+                                            if isinstance(genes, (list, tuple, set))
+                                            else str(genes)
+                                        )
+                                    )
+
+                                    zf.writestr(
+                                        "drug_frequency.csv",
+                                        drug_frequency_export.to_csv(index=False)
+                                    )
+
                                 # Add any extra files
                                 for f in extra_files:
                                     if os.path.exists(f):

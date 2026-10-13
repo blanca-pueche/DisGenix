@@ -1669,6 +1669,14 @@ if searchBy:
                 except NameError: pass
                 try: candidates.append(("Drug interactions",    "drug_df.csv",          drug_df))
                 except NameError: pass
+                try:
+                    candidates.append((
+                        "Drug frequency across input genes",
+                        "drug_frequency.csv",
+                        drug_frequency
+                    ))
+                except NameError:
+                    pass
 
                 if candidates:
                     st.markdown("### Select tables to include in ZIP")
@@ -1727,7 +1735,8 @@ if searchBy:
                         "topPathways.csv",
                         "genes_pathway.csv",
                         "drug_interactions.csv",
-                        "full_results_table.csv"
+                        "full_results_table.csv",
+                        "drug_frequency.csv",
                     ]
 
                     def count_csvs(folder):
@@ -1745,13 +1754,38 @@ if searchBy:
 
                             # Build ZIP in memory
                             zip_buf = io.BytesIO()
+
                             with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+
                                 # Add pathway CSVs
                                 for fname, data in pathway_csvs.items():
                                     zf.writestr(fname, data)
+
                                 # Add drug CSVs
                                 for fname, data in drug_csvs.items():
                                     zf.writestr(fname, data)
+
+                                # Add the drug frequency table
+                                if (
+                                        "drug_frequency" in globals()
+                                        and not drug_frequency.empty
+                                ):
+                                    drug_frequency_export = drug_frequency.copy()
+
+                                    # Convert the list of genes to a CSV-friendly string
+                                    drug_frequency_export["Genes"] = (
+                                        drug_frequency_export["Genes"].apply(
+                                            lambda genes: ", ".join(genes)
+                                            if isinstance(genes, (list, tuple, set))
+                                            else str(genes)
+                                        )
+                                    )
+
+                                    zf.writestr(
+                                        "drug_frequency.csv",
+                                        drug_frequency_export.to_csv(index=False)
+                                    )
+
                                 # Add any extra files
                                 for f in extra_files:
                                     if os.path.exists(f):
