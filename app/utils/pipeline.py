@@ -242,7 +242,8 @@ def analyze_pathways(df, number, retries=3, delay=5):
                 return None
             top_pathways = enr.results.copy()
             break  # success, exit retry loop
-        except gp.enrichr.EnrichrAPIError as e:
+        except Exception as e:
+            print(f"Error during pathway enrichment: {type(e).__name__}: {e}")
             st.warning(f"Enrichr API error (attempt {attempt+1}/{retries}): {e}")
             if attempt < retries - 1:
                 st.info(f"Retrying in {delay} seconds...")
