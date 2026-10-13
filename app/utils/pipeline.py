@@ -235,7 +235,7 @@ def analyze_pathways(df, number, retries=3, delay=5):
             enr = gp.enrichr(
                 gene_list=df_genes,
                 gene_sets="Reactome_2022",
-                organism="hsapiens",
+                organism="human",
                 outdir=None
             )
             if enr.results.empty:
