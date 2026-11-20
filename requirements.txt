@@ -1,13 +1,12 @@
-
-# requirements.txt for Tractome project
-# 
-biopython
-gseapy
-matplotlib
-numpy
-pandas
-plotly
-requests
-seaborn
-streamlit
-streamlit-autorefresh
+# requirements.txt for DisGenix
+# Tested with Python 3.11
+biopython==1.88
+gseapy==1.3.1
+matplotlib==3.11.2
+numpy==2.4.6
+pandas==3.0.6
+plotly==7.1.0
+requests==2.34.2
+seaborn==0.13.2
+streamlit==1.65.0
+streamlit-autorefresh==1.0.1
