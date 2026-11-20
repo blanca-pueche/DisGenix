@@ -137,15 +137,45 @@ def get_gene_names_batch(ensembl_ids):
 
     return gene_map
 
+REFERENCE_TERMS = re.compile(
+    r"\bnormal\b|\bcontrol\b|\bhealthy\b|\bnon[- ]?tumou?r|\bnon[- ]?neoplastic|"
+    r"\bnon[- ]?lesional|\buninvolved\b|\bunaffected\b",
+    re.IGNORECASE,
+)
+COMPARISON_FORMAT = re.compile(r"^'(.*?)'\s+vs\s+'(.*?)'(?:\s+in\s+'.*')?$")
+
+
+def filter_disease_comparisons(df, exclude_terms=None):
+    """Keep only Expression Atlas comparisons of disease versus a healthy/control reference."""
+    def is_disease_vs_reference(comparison):
+        match = COMPARISON_FORMAT.match(str(comparison).strip())
+        if not match:
+            return False
+        test_side, reference_side = match.groups()
+        if exclude_terms and re.search("|".join(exclude_terms), test_side, re.IGNORECASE):
+            return False
+        return bool(REFERENCE_TERMS.search(reference_side)) and not REFERENCE_TERMS.search(test_side)
+
+    keep = df["Comparison"].apply(is_disease_vs_reference)
+    return df[keep].copy()
+
 def fetch_gene_names(df):
     """
     Fetches gene names from ensembl and groups them according to log_2 fold change.
     """
-    required_columns = ["Gene", "log_2 fold change", "Adjusted p-value"]
+    required_columns = ["Gene", "log_2 fold change", "Adjusted p-value", "Comparison"]
     for col in required_columns:
         if col not in df.columns:
             st.error(f"Missing required column: '{col}'")
             st.stop()
+    df = filter_disease_comparisons(df)
+    if df.empty:
+        st.error(
+            "The file contains no comparisons of diseased versus healthy/control samples, "
+            "so it cannot be analysed."
+        )
+        st.stop()
+    st.caption("Comparisons analysed: " + "; ".join(df["Comparison"].unique()))
 
     gene_ids = tuple(
         str(gene_id)
@@ -157,11 +187,21 @@ def fetch_gene_names(df):
     df["Gene Name"] = df["Gene"].map(gene_map)
     df_filtered = df[df["Gene Name"] != "Not Found"]
 
+    # Step 1: within each experiment, median log2FC and minimum adjusted p-value
+    if "Experiment accession" in df_filtered.columns:
+        df_filtered = df_filtered.groupby(
+            ["Gene", "Gene Name", "Experiment accession"], as_index=False
+        ).agg({
+            "log_2 fold change": "median",
+            "Adjusted p-value": "min"
+        })
+
+    # Step 2: across experiments, median log2FC and minimum adjusted p-value
     grouped = df_filtered.groupby(
         ["Gene", "Gene Name"], as_index=False
     ).agg({
-        "log_2 fold change": "sum",
-        "Adjusted p-value": "sum"
+        "log_2 fold change": "median",
+        "Adjusted p-value": "min"
     })
 
     return grouped
@@ -270,14 +310,14 @@ def analyze_pathways(df, number, retries=3, delay=5):
     top_pathways["Input %"] = top_pathways["Input Genes"] / top_pathways["Pathway Genes"] * 100
     top_pathways = top_pathways.sort_values("Adjusted P-value", ascending=True).head(number)
 
-    # Sum log2fc for overlapping genes per pathway
+    # Mean log2FC of the overlapping genes per pathway
     df["Gene Name"] = df["Gene Name"].astype(str).str.strip().str.upper()
-    sum_fc = []
+    mean_fc = []
     for _, row in top_pathways.iterrows():
         genes = [g.strip().upper() for g in row["Genes"].split(";")]
         overlap_df = df[df["Gene Name"].isin(genes)]
-        sum_fc.append(overlap_df["log_2 fold change"].sum())
-    top_pathways["Sum log2fc"] = sum_fc
+        mean_fc.append(overlap_df["log_2 fold change"].mean())
+    top_pathways["Mean log2fc"] = mean_fc
 
     return top_pathways
 

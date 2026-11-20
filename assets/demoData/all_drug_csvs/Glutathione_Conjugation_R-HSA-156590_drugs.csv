@@ -1,0 +1,3 @@
+Gene,Drug,Interaction Type,Directionality,Source,PMID,Interaction Score
+"<a href=""https://dgidb.org/results?searchType=gene&searchTerms=GSTM2"" target=""_blank"">GSTM2</a>","<a href=""https://dgidb.org/results?searchType=drug&searchTerms=GLUTATHIONE%20DISULFIDE"" target=""_blank"">GLUTATHIONE DISULFIDE</a>",N/A,N/A,Drug Repurposing Hub,"<a href=""https://pubmed.ncbi.nlm.nih.gov/N/A/"" target=""_blank"">N/A</a>",5.852841817356791
+"<a href=""https://dgidb.org/results?searchType=gene&searchTerms=GSTM2"" target=""_blank"">GSTM2</a>","<a href=""https://dgidb.org/results?searchType=drug&searchTerms=GLUTATHIONE"" target=""_blank"">GLUTATHIONE</a>",N/A,N/A,Drug Repurposing Hub,"<a href=""https://pubmed.ncbi.nlm.nih.gov/N/A/"" target=""_blank"">N/A</a>",0.6160886123533464

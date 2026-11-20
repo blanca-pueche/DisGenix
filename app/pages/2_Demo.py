@@ -182,6 +182,11 @@ if mesh_id:
     if uploaded_file:
         df_raw = pd.read_csv(uploaded_file, sep="\t")
         st.write("Uploaded correctly")
+        st.caption(
+            "Comparisons analysed: colon adenocarcinoma vs normal; colon sessile serrated adenoma/polyp vs normal "
+            "(E-GEOD-76987); neoplasm vs normal tissue near to / far from neoplasm in EpCAM+ cells (E-MTAB-8803); "
+            "colon sessile serrated adenoma/polyp vs control (E-GEOD-46513)"
+        )
         
         with st.spinner("Mapping Ensembl IDs to gene names..."):
             time.sleep(1)
@@ -307,7 +312,8 @@ if mesh_id:
         
         df_genes["Gene Name_raw"] = df_genes["Gene Name"]
 
-        gname_fc = df_genes.groupby("Gene Name_raw", as_index=False)["log_2 fold change"].sum()
+        # Data are already one row per gene (median log2FC)
+        gname_fc = df_genes[["Gene Name_raw", "log_2 fold change"]].copy()
         gname_fc = gname_fc.sort_values("log_2 fold change", ascending=False)
 
         # Graph for genes and their log2 fold change
@@ -317,8 +323,8 @@ if mesh_id:
             y="log_2 fold change",
             color="log_2 fold change",
             color_continuous_scale="sunset",
-            title="Sum of log₂ fold change per gene",
-            labels={"Gene Name_raw": "Gene Name", "log_2 fold change": "Sum of log₂ fold change"},
+            title="Median log₂ fold change per gene",
+            labels={"Gene Name_raw": "Gene Name", "log_2 fold change": "Median log₂ fold change"},
             height=500,
             width=2000
         )
@@ -516,10 +522,12 @@ if mesh_id:
                     number_pathways = int(number_pathways)
                     #default file
                     top_pathways = pd.read_csv("../assets/demoData/topPathways.csv", sep=",")
+                    top_pathways = top_pathways.sort_values("Adjusted P-value").head(number_pathways)
 
                     if top_pathways is not None:
-                        html_pathway_table = top_pathways[["Reactome Link", "Adjusted P-value", "-log10(Adj P)", "Overlap", "Input %", "Sum log2fc"]].to_html(escape=False, index=False, table_id="topPathwayTable")
-                        
+                        html_pathway_table = top_pathways[
+                            ["Reactome Link", "Adjusted P-value", "-log10(Adj P)", "Overlap", "Input %",
+                             "Mean log2fc"]].to_html(escape=False, index=False, table_id="topPathwayTable")
                         html_code_top_pathways = f"""
                         <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
                         <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>

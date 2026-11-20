@@ -494,11 +494,8 @@ if searchBy:
         )
 
         if has_fold_change:
-            gname_fc = (
-                df_selected.groupby("Gene Name_raw", as_index=False)
-                ["log_2 fold change"]
-                .sum(min_count=1)
-            )
+            # Data are already one row per gene (median log2FC)
+            gname_fc = df_selected[["Gene Name_raw", "log_2 fold change"]].copy()
 
             gname_fc = gname_fc.sort_values(
                 "log_2 fold change",
@@ -512,10 +509,10 @@ if searchBy:
                 y="log_2 fold change",
                 color="log_2 fold change",
                 color_continuous_scale="sunset",
-                title="Sum of log₂ fold change per gene",
+                title="Median log₂ fold change per gene",
                 labels={
                     "Gene Name_raw": "Gene Name",
-                    "log_2 fold change": "Sum of log₂ fold change"
+                    "log_2 fold change": "Median log₂ fold change"
                 },
                 height=500,
                 width=2000
@@ -756,7 +753,7 @@ if searchBy:
                     top_pathways = top_pathways.sort_values("Adjusted P-value", ascending=True)
 
                     if top_pathways is not None:
-                        html_pathway_table = top_pathways[["Reactome Link", "Adjusted P-value", "-log10(Adj P)", "Overlap", "Input %", "Sum log2fc"]].to_html(escape=False, index=False, table_id="topPathwayTable")
+                        html_pathway_table = top_pathways[["Reactome Link", "Adjusted P-value", "-log10(Adj P)", "Overlap", "Input %", "Mean log2fc"]].to_html(escape=False, index=False, table_id="topPathwayTable")
 
                         html_code_top_pathways = f"""
                         <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">

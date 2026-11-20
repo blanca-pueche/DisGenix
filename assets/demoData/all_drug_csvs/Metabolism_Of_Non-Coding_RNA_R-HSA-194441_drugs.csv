@@ -1,0 +1,2 @@
+Gene,Drug,Interaction Type,Directionality,Source,PMID,Interaction Score
+"<a href=""https://dgidb.org/results?searchType=gene&searchTerms=NUP153"" target=""_blank"">NUP153</a>","<a href=""https://dgidb.org/results?searchType=drug&searchTerms=TICAGRELOR"" target=""_blank"">TICAGRELOR</a>",N/A,N/A,ClinPGx,"<a href=""https://pubmed.ncbi.nlm.nih.gov/35501592/"" target=""_blank"">35501592</a>",9.364546907770865

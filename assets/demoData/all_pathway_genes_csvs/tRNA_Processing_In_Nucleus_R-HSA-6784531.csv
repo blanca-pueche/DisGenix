@@ -1,0 +1,3 @@
+Gene,Gene Name,log_2 fold change,Adjusted p-value,Gene Name_raw,abs_fc
+ENSG00000124787,RPP40,6.9,1.3369537913e-06,RPP40,6.9
+ENSG00000124789,NUP153,5.5,5.54505488798e-05,NUP153,5.5

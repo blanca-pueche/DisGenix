@@ -1,0 +1,2 @@
+Gene,Drug,Interaction Type,Directionality,Source,PMID,Interaction Score
+"<a href=""https://dgidb.org/results?searchType=gene&searchTerms=CXCL11"" target=""_blank"">CXCL11</a>","<a href=""https://dgidb.org/results?searchType=drug&searchTerms=SX-682"" target=""_blank"">SX-682</a>",N/A,N/A,Drug Repurposing Hub,"<a href=""https://pubmed.ncbi.nlm.nih.gov/N/A/"" target=""_blank"">N/A</a>",15.60757817961811

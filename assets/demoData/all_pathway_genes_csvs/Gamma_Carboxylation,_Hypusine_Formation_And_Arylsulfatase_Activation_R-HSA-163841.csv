@@ -1,0 +1,3 @@
+Gene,Gene Name,log_2 fold change,Adjusted p-value,Gene Name_raw,abs_fc
+ENSG00000164291,ARSK,7.6,0.0108081228024399,ARSK,7.6
+ENSG00000180801,ARSJ,7.15,7.70866511038e-05,ARSJ,7.15
