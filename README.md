@@ -3,7 +3,7 @@
 
 DisGenix is a web-based application designed for the integrative analysis of disease-associated gene expression data. The tool links differentially expressed genes with tractability annotations, pathway enrichment, and drug–gene interactions, providing a comprehensive view of disease mechanisms and potential therapeutic targets. Our tool is focused on upregulated genes, which could be the target of pharmacological treatments.
 
-![DisGenix workflow](assets/doc/DisGenix_workflow.png)
+![DisGenix workflow](assets/doc/DisGenix_workflow1.png)
 
 ## Features
 - **Identify disease** using a MeSH ID or disease name.
