@@ -222,7 +222,7 @@ if searchBy:
             if selected_disease:
                 mesh_id = mesh_df.loc[mesh_df["Name"] == selected_disease, "MeSH_ID"].values[0]
                 disease_url = f"https://www.ncbi.nlm.nih.gov/mesh/{mesh_id}"
-                normalized_disease = selected_disease
+                normalized_disease = normalize_disease_name(selected_disease)
                 st.success(f"🎯 Disease **[{normalized_disease}]({disease_url})** identified")
     elif searchBy == options[2]:
         uploaded_csv = st.file_uploader(

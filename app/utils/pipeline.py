@@ -9,7 +9,7 @@ import os
 import urllib.parse
 import gseapy as gp
 import io, zipfile
-import re
+import re, json
 import urllib.parse
 
 GRAPHQL_URL = "https://dgidb.org/api/graphql"
@@ -102,18 +102,17 @@ def get_disease_name(mesh_id):
 
 def generate_expression_atlas_link(disease_name):
     """
-    Generates link to Expression Atlas for a given disease to extract gene information. 
+    Generates the Expression Atlas search link (upregulated genes, Homo sapiens) for a disease.
     """
-    encoded_disease = urllib.parse.quote(disease_name)
-    base_url = (
-        "https://www.ebi.ac.uk/gxa/search?geneQuery=%5B%5D"
-        "&species=Homo%20sapiens"
-        f"&conditionQuery=[%7B%22value%22%3A%22{encoded_disease}%22%7D]"
-        "&ds=%7B%22kingdom%22%3A%5B%22animals%22%5D%2C%22regulation%22%3A%5B%22UP%22%5D%7D"
-        "&bs=%7B%22homo%20sapiens%22%3A%5B%22ORGANISM_PART%22%5D%7D"
-        "#differential"
-    )
-    return base_url
+    to_json = lambda obj: json.dumps(obj, separators=(",", ":"))
+    params = {
+        "geneQuery": "[]",
+        "species": "Homo sapiens",
+        "conditionQuery": to_json([{"value": disease_name}]),
+        "ds": to_json({"kingdom": ["animals"], "regulation": ["UP"]}),
+    }
+    query = urllib.parse.urlencode(params, quote_via=urllib.parse.quote, safe="")
+    return f"https://www.ebi.ac.uk/gxa/search?{query}#differential"
 
 
 @st.cache_data(show_spinner=False)
@@ -433,14 +432,12 @@ def drug_with_links(df):
 
 def normalize_disease_name(name: str) -> str:
     """
-    Normalizes the disease name to match those in Expression Atlas
+    Normalizes the disease name to match those in Expression Atlas.
+    Converts inverted MeSH names to natural order and lowercase, e.g.
+    "Leukemia, Myeloid, Acute" -> "acute myeloid leukemia"
     """
-    # If there's a comma, move the part after the comma to the front
-    if "," in name:
-        parts = [part.strip() for part in name.split(",")]
-        # e.g., ["Muscular Dystrophy", "Duchenne"] → "Duchenne Muscular Dystrophy"
-        return f"{parts[1]} {parts[0]}"
-    return name
+    parts = [part.strip() for part in name.split(",") if part.strip()]
+    return " ".join(reversed(parts)).lower()
 
 
 def add_links_to_final_table(df):
